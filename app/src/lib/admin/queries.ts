@@ -209,10 +209,12 @@ export async function loadVendorDetail(
 
 // -------------------------------------------------------------- customers
 
+export type CustomerListFilters = { bannedOnly: boolean; term: string };
+
 export async function loadCustomers(
   sp: SearchParams,
   supabase: SupabaseServerClient = createSupabaseServerClient()
-): Promise<Paged<Customer> & { bannedOnly: boolean }> {
+): Promise<Paged<Customer> & { filters: CustomerListFilters }> {
   const page = parsePage(sp, 25);
   const bannedOnly = first(sp.banned) === '1';
   const term = parseTerm(sp);
@@ -231,7 +233,10 @@ export async function loadCustomers(
   const { data, count, error } = await query;
   if (error) console.error('[admin] could not load customers', error);
 
-  return { ...paged(data as Customer[] | null, count, page), bannedOnly };
+  return {
+    ...paged(data as Customer[] | null, count, page),
+    filters: { bannedOnly, term },
+  };
 }
 
 export type CustomerDetail = {
@@ -435,12 +440,20 @@ export const DISPUTE_STATUSES: readonly DisputeStatus[] = [
 
 export type DisputeListFilters = { status: DisputeStatus | 'all' };
 
+/** The order a dispute points at, denormalised onto the row for the list view. */
+export type DisputeOrderSummary = {
+  id: number;
+  pickup_code: string;
+  total_amount: number;
+  vendors: { name: string } | null;
+};
+
+export type DisputeListRow = Dispute & { orders: DisputeOrderSummary | null };
+
 export async function loadDisputes(
   sp: SearchParams,
   supabase: SupabaseServerClient = createSupabaseServerClient()
-): Promise<Paged<Dispute & { orders: { vendors: { name: string } | null } | null }> & {
-  filters: DisputeListFilters;
-}> {
+): Promise<Paged<DisputeListRow> & { filters: DisputeListFilters }> {
   const page = parsePage(sp, 25);
   const status = (parseFilter(sp, 'status', DISPUTE_STATUSES) ?? 'all') as
     | DisputeStatus
@@ -460,12 +473,18 @@ export async function loadDisputes(
   const { data, count, error } = await query;
   if (error) console.error('[admin] could not load disputes', error);
 
-  type DisputeRow = Dispute & { orders: { vendors: { name: string } | null } | null };
   const rows = ((data ?? []) as unknown[]).map((row) => {
-    const dispute = row as DisputeRow;
-    const order = one(dispute.orders);
-    return { ...dispute, orders: order ? { ...order, vendors: one(order.vendors) } : null };
-  }) as DisputeRow[];
+    const dispute = row as DisputeListRow;
+    const order = one(dispute.orders) as
+      | (DisputeOrderSummary & { vendors: unknown })
+      | null;
+    return {
+      ...dispute,
+      orders: order
+        ? ({ ...order, vendors: one(order.vendors) } as DisputeOrderSummary)
+        : null,
+    };
+  }) as DisputeListRow[];
 
   return { ...paged(rows, count, page), filters: { status } };
 }

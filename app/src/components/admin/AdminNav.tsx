@@ -8,6 +8,7 @@ import {
   FileWarning,
   LayoutDashboard,
   Receipt,
+  ScrollText,
   Settings,
   ShieldCheck,
   Store,
@@ -21,7 +22,7 @@ type NavItem = {
   href: string;
   label: string;
   icon: typeof Store;
-  /** Phase that ships this screen. Absent means it is live now. */
+  /** Not built yet. Absent means the screen is live. */
   phase?: number;
   superOnly?: boolean;
 };
@@ -32,25 +33,27 @@ const NAV: { group: string; items: NavItem[] }[] = [
     items: [
       { href: '/admin', label: 'Overview', icon: LayoutDashboard },
       { href: '/admin/vendors', label: 'Vendors', icon: Store },
-      { href: '/admin/orders', label: 'Orders', icon: Receipt, phase: 3 },
-      { href: '/admin/customers', label: 'Customers', icon: Users, phase: 2 },
+      { href: '/admin/customers', label: 'Customers', icon: Users },
+      { href: '/admin/orders', label: 'Orders', icon: Receipt },
     ],
   },
   {
     group: 'Money',
     items: [
-      { href: '/admin/disputes', label: 'Disputes', icon: FileWarning, phase: 3 },
-      { href: '/admin/refunds', label: 'Refunds', icon: Undo2, phase: 4 },
+      { href: '/admin/disputes', label: 'Disputes', icon: FileWarning },
+      // Payment capture and refunds are out of scope for this build: there is no
+      // provider wired up, so these screens would have nothing real to show.
       { href: '/admin/payments', label: 'Payments', icon: CreditCard, phase: 4 },
+      { href: '/admin/refunds', label: 'Refunds', icon: Undo2, phase: 4 },
     ],
   },
   {
     group: 'Platform',
     items: [
-      { href: '/admin/admins', label: 'Admin users', icon: ShieldCheck, phase: 5, superOnly: true },
-      { href: '/admin/settings', label: 'Settings', icon: Settings, phase: 5, superOnly: true },
-      { href: '/admin/audit-log', label: 'Audit log', icon: ShieldCheck, phase: 6 },
-      { href: '/admin/reports', label: 'Reports', icon: BarChart3, phase: 6 },
+      { href: '/admin/admins', label: 'Admin users', icon: ShieldCheck, superOnly: true },
+      { href: '/admin/settings', label: 'Settings', icon: Settings, superOnly: true },
+      { href: '/admin/audit-log', label: 'Audit log', icon: ScrollText },
+      { href: '/admin/reports', label: 'Reports', icon: BarChart3 },
     ],
   },
 ];
