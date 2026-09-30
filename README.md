@@ -54,11 +54,13 @@ The service role key and Paystack secret must only be used by server-side code a
 Super Admin Panel, following `DOCS/10-SUPER-ADMIN-IMPLEMENTATION-GUIDE.md`:
 
 - **Phase 1 — done.** Schema, auth middleware, admin login, Overview dashboard, vendor approval as the first audited action.
-- **Phase 2.** Vendor list/detail with suspend and reactivate; customer list/detail with ban.
-- **Phase 3.** Platform-wide order list, dispute queue, manual force-cancel with stock and slot reversal.
-- **Phase 4.** Refund issuance against Paystack, payment reconciliation.
-- **Phase 5.** Admin account management and platform settings.
-- **Phase 6.** Full audit log UI and analytics.
+- **Phase 2 — done.** Vendor list/detail with suspend and reactivate; customer list/detail with ban.
+- **Phase 3 — done.** Platform-wide order list, dispute queue, manual force-cancel with stock and slot reversal.
+- **Phase 4 — dropped.** Refund issuance against Paystack and payment reconciliation are out of scope for this build. There is no payment provider wired up, so a refund screen would have nothing real to act on. `/admin/payments` and `/admin/refunds` are the only nav entries still marked unbuilt.
+- **Phase 5 — done.** Admin account management and platform settings, both Super-Admin-only.
+- **Phase 6 — done.** Full audit log UI with before/after diffs, plus 7/30/90-day reports.
+
+Migrations `202609290001` and `202609290002` are applied to the live project. `202609300003_admin_oversight.sql` is **not** — the Phase 2/3/5 screens will render but every action will fail until you apply it.
 
 Core platform: connect customer auth, replace sample vendor/menu/slot data with RLS-scoped queries and realtime subscriptions, add server-side order creation calling `place_order` with client-generated idempotency keys, add Paystack initialize plus a signature-verified webhook, then notifications and pilot monitoring.
 
@@ -82,10 +84,27 @@ update public.platform_settings set value = '0'::jsonb where key = 'commission_r
 
 All four should raise — `ADMIN_AUDIT_LOG_APPEND_ONLY` for the first two, and a RLS violation for the last two. Sensible writes go through `admin_approve_vendor` / `admin_reject_vendor`, which record the action and the reason in the same transaction.
 
-The one to check by hand, because RLS cannot express it and column privileges are doing the work: sign in as a *banned customer* and try to run
+The next two are the checks that RLS cannot express at all, because column privileges are doing the work. Run them signed in as a **vendor owner** (not an admin):
+
+```sql
+-- Must fail: this is the self-approval hole closed in migration 003.
+update public.vendors set status = 'active' where id = <your vendor id>;
+
+-- Must fail: a vendor could otherwise mint pickup capacity.
+update public.pickup_slots set orders_count = 0 where vendor_id = <your vendor id>;
+
+-- Must still succeed: owners legitimately edit their own details.
+update public.vendors set phone = '08000000000' where id = <your vendor id>;
+```
+
+`DOCS/11-SUPER-ADMIN-DECISIONS.md` ADR-008 explains why a correct `vendors_manage` policy was not enough.
+
+The one to check by hand for customers, same reasoning: sign in as a *banned customer* and try to run
 
 ```sql
 update public.customers set banned_at = null, banned_reason = null where id = auth.uid();
 ```
 
 That must fail with a permission error, while `update public.customers set name = 'x' where id = auth.uid()` still succeeds.
+
+Finally, `admin_set_admin_role` refuses to demote the last Super Admin, so try demoting yourself from a single-admin account and confirm it raises `LAST_SUPER_ADMIN` rather than locking the panel.
