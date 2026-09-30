@@ -60,7 +60,9 @@ Super Admin Panel, following `DOCS/10-SUPER-ADMIN-IMPLEMENTATION-GUIDE.md`:
 - **Phase 5 — done.** Admin account management and platform settings, both Super-Admin-only.
 - **Phase 6 — done.** Full audit log UI with before/after diffs, plus 7/30/90-day reports.
 
-Migrations `202609290001` and `202609290002` are applied to the live project. `202609300003_admin_oversight.sql` is **not** — the Phase 2/3/5 screens will render but every action will fail until you apply it.
+All three migrations (`202609290001`, `202609290002`, `202609300003_admin_oversight.sql`) are applied to the live project.
+
+Demo data lives in `supabase/seed.sql` (vendors, menus, slots) and `supabase/seed-admin-demo.sql` (orders, payments, disputes). `scripts/seed-admin-demo.py` creates the same rows over the REST API, which is how you get the two Auth identities the column-privilege checks below need — an admin session cannot test them, because admins have no direct write path to a vendor at all.
 
 Core platform: connect customer auth, replace sample vendor/menu/slot data with RLS-scoped queries and realtime subscriptions, add server-side order creation calling `place_order` with client-generated idempotency keys, add Paystack initialize plus a signature-verified webhook, then notifications and pilot monitoring.
 
@@ -87,15 +89,17 @@ All four should raise — `ADMIN_AUDIT_LOG_APPEND_ONLY` for the first two, and a
 The next two are the checks that RLS cannot express at all, because column privileges are doing the work. Run them signed in as a **vendor owner** (not an admin):
 
 ```sql
--- Must fail: this is the self-approval hole closed in migration 003.
-update public.vendors set status = 'active' where id = <your vendor id>;
+-- Must fail with 42501: this is the self-approval hole closed in migration 003.
+update public.vendors set status = 'active' where id = 1;
 
--- Must fail: a vendor could otherwise mint pickup capacity.
-update public.pickup_slots set orders_count = 0 where vendor_id = <your vendor id>;
+-- Must fail with 42501: a vendor could otherwise mint pickup capacity.
+update public.pickup_slots set orders_count = 0 where vendor_id = 1;
 
 -- Must still succeed: owners legitimately edit their own details.
-update public.vendors set phone = '08000000000' where id = <your vendor id>;
+update public.vendors set phone = '08000000000' where id = 1;
 ```
+
+`scripts/seed-admin-demo.py` maps `vendor@bukkago.com` to vendor 1, so those ids are already filled in. All three were confirmed against the live project. The full column grant set is worth checking the same way: owners may write `name`, `description`, `logo_url`, `area`, `address`, `phone` and `avg_prep_time_minutes` on `vendors`, and `start_time`, `end_time` and `capacity` on `pickup_slots`; `status`, `suspended_at`, `suspended_reason`, `suspended_by` and `commission_rate` all raise. `commission_rate` is intentionally not reachable even for a Super Admin outside `admin_update_setting`.
 
 `DOCS/11-SUPER-ADMIN-DECISIONS.md` ADR-008 explains why a correct `vendors_manage` policy was not enough.
 
