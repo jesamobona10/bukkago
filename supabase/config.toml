@@ -9,6 +9,11 @@ max_rows = 1000
 [db]
 major_version = 15
 
+[db.seed]
+# Runs on `supabase db reset`. Vendors, menus and slots only — anything with a foreign key
+# into auth.users is left to supabase/seed-demo-orders.sql, which needs a real signed-up user.
+sql_paths = ["./seed.sql"]
+
 [auth]
 enabled = true
 site_url = "http://localhost:3000"
