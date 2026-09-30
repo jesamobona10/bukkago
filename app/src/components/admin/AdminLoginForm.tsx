@@ -3,20 +3,17 @@
 import { useState, type FormEvent } from 'react';
 import { ArrowRight, Loader2, ShieldAlert } from 'lucide-react';
 
-import { isSupabaseConfigured } from '@/lib/supabase/env';
-
 type Props = {
   next: string;
   notAnAdmin: boolean;
+  configured: boolean;
 };
 
-export default function AdminLoginForm({ next, notAnAdmin }: Props) {
+export default function AdminLoginForm({ next, notAnAdmin, configured }: Props) {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
-
-  const configured = isSupabaseConfigured();
 
   async function onSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
