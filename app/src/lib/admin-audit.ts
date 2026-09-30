@@ -22,16 +22,93 @@ import { createSupabaseServerClient, type SupabaseServerClient } from './supabas
  * before a round trip; the database remains the enforcement point.
  */
 
-export type AuditedRpc = 'admin_approve_vendor' | 'admin_reject_vendor';
+/** Every SECURITY DEFINER function in migrations 002 and 003 that an admin may call. */
+export type AuditedRpc =
+  // migration 002 — vendor application review
+  | 'admin_approve_vendor'
+  | 'admin_reject_vendor'
+  // migration 003 — vendor oversight
+  | 'admin_suspend_vendor'
+  | 'admin_reactivate_vendor'
+  | 'admin_provision_vendor'
+  // migration 003 — customer bans
+  | 'admin_ban_customer'
+  | 'admin_unban_customer'
+  // migration 003 — order and dispute intervention
+  | 'admin_force_cancel_order'
+  | 'admin_resolve_dispute'
+  // migration 003 — super-admin-only
+  | 'admin_provision_admin'
+  | 'admin_set_admin_role'
+  | 'admin_update_setting';
 
 const RPC_ERRORS: Record<string, { status: number; message: string }> = {
   FORBIDDEN: { status: 403, message: 'You are not allowed to perform this action.' },
-  REASON_REQUIRED: { status: 400, message: 'A reason is required and is recorded in the audit log.' },
+  REASON_REQUIRED: {
+    status: 400,
+    message: 'A reason is required and is recorded in the audit log.',
+  },
+  // vendors
   VENDOR_NOT_FOUND: { status: 404, message: 'Vendor not found.' },
   VENDOR_NOT_PENDING: {
     status: 409,
     message: 'That application has already been decided. Reload and try again.',
   },
+  VENDOR_NOT_SUSPENDABLE: {
+    status: 409,
+    message: 'Only a pending or active vendor can be suspended. Reload and try again.',
+  },
+  VENDOR_NOT_SUSPENDED: {
+    status: 409,
+    message: 'That vendor is not currently suspended.',
+  },
+  VENDOR_NAME_REQUIRED: { status: 400, message: 'A vendor name is required.' },
+  // customers
+  CUSTOMER_NOT_FOUND: { status: 404, message: 'Customer not found.' },
+  CUSTOMER_ALREADY_BANNED: { status: 409, message: 'That customer is already banned.' },
+  CUSTOMER_NOT_BANNED: { status: 409, message: 'That customer is not banned.' },
+  // orders
+  ORDER_NOT_FOUND: { status: 404, message: 'Order not found.' },
+  ORDER_ALREADY_CLOSED: {
+    status: 409,
+    message: 'That order is already closed, so there is nothing to cancel.',
+  },
+  VENDOR_NOT_OPERATIONAL: {
+    status: 409,
+    message: 'That vendor is suspended and cannot accept new orders.',
+  },
+  // disputes
+  DISPUTE_NOT_FOUND: { status: 404, message: 'Dispute not found.' },
+  DISPUTE_ALREADY_CLOSED: {
+    status: 409,
+    message: 'That dispute has already been closed.',
+  },
+  INVALID_DISPUTE_STATUS: { status: 400, message: 'That is not a valid dispute status.' },
+  RESOLUTION_NOTES_REQUIRED: {
+    status: 400,
+    message: 'Record what was decided before closing a dispute.',
+  },
+  // admins and settings
+  ADMIN_NOT_FOUND: { status: 404, message: 'That admin account no longer exists.' },
+  ADMIN_ALREADY_EXISTS: {
+    status: 409,
+    message: 'That user is already an admin.',
+  },
+  AUTH_USER_NOT_FOUND: {
+    status: 404,
+    message: 'No Supabase Auth user has that UUID. Create the user first.',
+  },
+  USER_ID_REQUIRED: { status: 400, message: 'A user UUID is required.' },
+  EMAIL_REQUIRED: { status: 400, message: 'An email address is required.' },
+  INVALID_ROLE: { status: 400, message: 'That is not a valid admin role.' },
+  ROLE_UNCHANGED: { status: 409, message: 'That account already has that role.' },
+  LAST_SUPER_ADMIN: {
+    status: 409,
+    message: 'This is the only Super Admin. Promote someone else first, or you will lock everyone out.',
+  },
+  SETTING_NOT_FOUND: { status: 404, message: 'That setting does not exist.' },
+  SETTING_KEY_REQUIRED: { status: 400, message: 'A setting key is required.' },
+  SETTING_VALUE_REQUIRED: { status: 400, message: 'A setting value is required.' },
 };
 
 export class AdminActionError extends Error {
@@ -89,8 +166,8 @@ export async function runAuditedAction<T>({
     throw new AdminActionError('unauthenticated', 'You must be signed in.', 401);
   }
 
-  // RLS on admin_users only permits `id = auth.uid()`, so this can only ever return the
-  // caller's own row — there is no id argument to point it at another admin.
+  // Filtered on the caller's own id: RLS lets any admin read admin_users, but this query has
+  // no id argument, so it can only ever return the caller's own row.
   const { data: admin } = await supabase
     .from('admin_users')
     .select('id, email, role')
@@ -104,9 +181,10 @@ export async function runAuditedAction<T>({
   // The database repeats the role check inside the function. Doing it here too just avoids
   // a pointless round trip and produces a clearer message in the UI.
   if (allowedRoles && !allowedRoles.includes(admin.role as AdminUser['role'])) {
+    const names = allowedRoles.map((role) => (role === 'super_admin' ? 'Super Admin' : 'Support Admin'));
     throw new AdminActionError(
       'forbidden',
-      'Only a Super Admin can perform this action.',
+      `This action is restricted to ${names.join(' or ')}.`,
       403
     );
   }

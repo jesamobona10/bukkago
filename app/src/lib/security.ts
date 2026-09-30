@@ -37,9 +37,9 @@ export async function getAuthContext(
 }
 
 /**
- * Reads the caller's own admin_users row. RLS on admin_users only permits
- * `id = auth.uid()`, so this can only ever return the caller's own record — there is no
- * id parameter to point it at somebody else.
+ * Reads the caller's own admin_users row. RLS allows any admin to read admin_users, but this
+ * deliberately filters on the caller's own id: there is no user id parameter to point at
+ * somebody else, so this function can only ever return the caller's own record.
  */
 export async function getAdminUser(
   client: SupabaseServerClient = createSupabaseServerClient()

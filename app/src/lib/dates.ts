@@ -104,3 +104,47 @@ export function formatDateRange(from: Date, to: Date): string {
   const end = to.toLocaleDateString(NIGERIAN_LOCALE, options);
   return `${start} – ${end}`;
 }
+
+/**
+ * Absolute timestamp for detail views, where "3h ago" is not enough — an admin reading an
+ * audit row needs the wall-clock time it happened, and the timezone spelled out.
+ */
+export function formatDateTime(iso: string | null | undefined): string {
+  if (!iso) return '—';
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) return '—';
+
+  return `${date.toLocaleString(NIGERIAN_LOCALE, {
+    day: 'numeric',
+    month: 'short',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: true,
+  })} WAT`;
+}
+
+/** Date only, for rows where the time of day is noise. */
+export function formatDate(iso: string | null | undefined): string {
+  if (!iso) return '—';
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) return '—';
+  return date.toLocaleDateString(NIGERIAN_LOCALE, {
+    day: 'numeric',
+    month: 'short',
+    year: 'numeric',
+  });
+}
+
+export function initials(value: string | null | undefined, fallback = '?'): string {
+  if (!value) return fallback;
+  return (
+    value
+      .split(/[\s@._-]+/)
+      .filter(Boolean)
+      .slice(0, 2)
+      .map((part) => part[0]?.toUpperCase() ?? '')
+      .join('') || fallback
+  );
+}
+

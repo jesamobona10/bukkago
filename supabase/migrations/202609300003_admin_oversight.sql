@@ -426,8 +426,9 @@ declare
   v_closing boolean := p_status in ('resolved','rejected');
 begin
   if v_admin is null or not public.is_admin() then raise exception 'FORBIDDEN'; end if;
+  -- 'open' is deliberately not a target: a new dispute starts open, and there is no way
+  -- back to open once someone has picked it up.
   if p_status not in ('investigating','resolved','rejected') then raise exception 'INVALID_DISPUTE_STATUS'; end if;
-  if p_status = 'open' then raise exception 'INVALID_DISPUTE_STATUS'; end if;
 
   select * into v_dispute from public.disputes where id = p_dispute_id for update;
   if not found then raise exception 'DISPUTE_NOT_FOUND'; end if;
