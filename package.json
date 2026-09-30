@@ -1,0 +1,15 @@
+{
+  "name": "bukkago-monorepo",
+  "version": "0.1.0",
+  "private": true,
+  "workspaces": [
+    "app"
+  ],
+  "scripts": {
+    "dev": "npm run dev --workspace app",
+    "build": "npm run build --workspace app",
+    "start": "npm run start --workspace app",
+    "lint": "npm run lint --workspace app",
+    "typecheck": "npm exec --workspace app -- tsc --noEmit"
+  }
+}
